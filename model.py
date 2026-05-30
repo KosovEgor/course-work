@@ -40,12 +40,6 @@ def fetch_sber_tinvest(days=90):
     return df
 
 
-def fetch_sber(days=90):
-    print("[DATA] Fetching from T-Invest API …")
-    df = fetch_sber_tinvest(days)
-    print(f"[DATA] T-Invest: {len(df)} candles fetched.")
-    return df, 'T-Invest'
-
 def identify_swings(df, window=3):
     sh = (df['High'] > df['High'].shift(1)) & \
          (df['High'] > df['High'].shift(2)) & \
@@ -171,9 +165,6 @@ def simulate(stock_symbol, results_df, initial_balance=10_000,
         'Successful Trades': successful_trades,
         'Average Trade Profit (%)': round(avg_trade_profit, 4),
     }
-    print(f"\n{'='*55}")
-    print(f"  Results for {stock_symbol}")
-    print(f"{'='*55}")
     for k, v in summary.items():
         print(f"  {k:<35} {v}")
     return portfolio_values, drawdown_pct.tolist(), summary
@@ -213,7 +204,6 @@ def plot_portfolio(results_df, portfolio_values, symbol, out_dir):
     path = os.path.join(out_dir, 'portfolio_vs_buyhold.png')
     fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"[CHART] Saved: {path}")
 
 
 def plot_drawdown(results_df, drawdown_pct, symbol, out_dir):
@@ -248,38 +238,28 @@ def plot_drawdown(results_df, drawdown_pct, symbol, out_dir):
     path = os.path.join(out_dir, 'drawdown_chart.png')
     fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"[CHART] Saved: {path}")
 
 
 def main():
     SYMBOL = 'SBER'
     SPLIT_RATIO = 0.80
     MAX_DEPTH = 20
-    df_raw, source = fetch_sber(days=90)
-    print(f"\n[DATA] Source: {source} | Candles: {len(df_raw)}")
+
+    df_raw = fetch_sber_tinvest(90)
     df_raw.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_raw.csv'), index=False)
-    print("\n[FEATURES] Engineering features …")
     df = prepare_df(df_raw)
-    print(f"[FEATURES] Rows after processing: {len(df)} | "
-          f"Target 1s: {df['Target'].sum()} / {len(df)}")
     df.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_processed.csv'), index=False)
+
     X = df[FEATURES].values
     y = df['Target'].values
-    if len(X) < 60:
-        raise RuntimeError(
-            f"Not enough data after feature engineering ({len(X)} rows). "
-            "Try increasing the `days` parameter."
-        )
+
     split_idx = int(len(X) * SPLIT_RATIO)
     X_train, X_test = X[:split_idx], X[split_idx:]
     y_train, y_test = y[:split_idx], y[split_idx:]
-    print(f"\n[MODEL] Train: {len(X_train)} | Test: {len(X_test)}")
-    print("[MODEL] Training PDT (max_depth=%d) …" % MAX_DEPTH)
-    t0   = datetime.now()
+
     tree = build_pdt(X_train, y_train, max_depth=MAX_DEPTH)
-    elapsed = (datetime.now() - t0).total_seconds()
-    print(f"[MODEL] Training complete in {elapsed:.1f}s")
     y_pred = [predict(tree, x) for x in X_test]
+
     test_dates = df['time'].iloc[split_idx:].values
     test_close = df['Close'].iloc[split_idx:].values
     results_df = pd.DataFrame({
@@ -288,24 +268,22 @@ def main():
         'Predicted': y_pred,
         'Close': test_close,
     }).reset_index(drop=True)
-    ml_accuracy = (results_df['Actual'] == results_df['Predicted']).mean() * 100
-    print(f"[MODEL] ML Classification Accuracy: {ml_accuracy:.2f}%")
+
+    
     results_df.to_csv(os.path.join(OUTPUT_DIR, 'sber_results_test.csv'), index=False)
-    print("\n[SIM] Running trading simulation …")
+    print("Running trading simulation …")
     portfolio_values, drawdown_pct, summary = simulate(
         SYMBOL, results_df,
         initial_balance=10_000,
         trailing_stop_percent=0.005,
     )
-    summary['ML Classification Accuracy (%)'] = round(ml_accuracy, 4)
-    summary['Data Source']  = source
+
     summary['Train Candles'] = len(X_train)
     summary['Test Candles']  = len(X_test)
     summary['Features'] = ', '.join(FEATURES)
     metrics_df = pd.DataFrame([summary])
     metrics_path = os.path.join(OUTPUT_DIR, 'sber_metrics_summary.csv')
     metrics_df.to_csv(metrics_path, index=False)
-    print(f"\n[SAVE] Metrics saved: {metrics_path}")
     portfolio_df = pd.DataFrame({
         'Datetime': results_df['Datetime'],
         'Portfolio_Value': portfolio_values,
@@ -316,9 +294,7 @@ def main():
     pkl_path = os.path.join(OUTPUT_DIR, 'sber_pdt_model.pkl')
     with open(pkl_path, 'wb') as f:
         pickle.dump(tree, f)
-    print(f"[SAVE] Model (pickle) saved: {pkl_path}")
-    print("\n[DONE] All outputs written to:", os.path.abspath(OUTPUT_DIR))
-    print("\n── Key Paper Metrics ──────────────────────────────────")
+    print("\n── Key Metrics ──────────────────────────────────")
     print(f"  Growth (%):           {summary['Growth (%)']:>10.4f}%")
     print(f"  Max Drawdown (%):     {summary['Max Drawdown (%)']:>10.4f}%")
     print(f"  Buy & Hold Return:    {summary['Buy and Hold Return (%)']:>10.4f}%")
