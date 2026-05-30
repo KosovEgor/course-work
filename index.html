@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Акции – график и предсказание</title>
+    <title>Акции – график</title>
     <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
     <style>
         body { font-family: sans-serif; margin: 20px; }
@@ -14,11 +14,9 @@
 </head>
 <body>
 <div class="container">
-    <h2>Выберите тикер</h2>
     <select id="tickerSelect">
-        <option value="SBER">SBER</option>
+        <option value="Сбербанк">Сбербанк</option>
     </select>
-
     <div id="chart"></div>
     <div id="prediction"></div>
 </div>
@@ -30,7 +28,7 @@
         var options = {
             series: [{ data: chartData }],
             chart: { type: 'candlestick', height: 500, toolbar: { show: true } },
-            title: { text: 'Свечной график', align: 'left' },
+            title: { text: 'График свечей SBER', align: 'left' },
             xaxis: { type: 'datetime' },
             yaxis: { tooltip: { enabled: true } }
         };
@@ -64,5 +62,5 @@
     });
 </script>
 </body>
-</html>"""
+</html>
 
