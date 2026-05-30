@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Акции – график и предсказание</title>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .container { max-width: 1000px; margin: auto; }
+        select, button { font-size: 1rem; padding: 6px 12px; margin: 10px 0; }
+        #chart { margin-top: 20px; }
+        #prediction { margin-top: 20px; font-size: 1.2rem; color: #2c3e50; background: #ecf0f1; padding: 12px; border-radius: 8px; white-space: pre-line; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Выберите тикер</h2>
+    <select id="tickerSelect">
+        <option value="SBER">SBER</option>
+    </select>
+
+    <div id="chart"></div>
+    <div id="prediction"></div>
+</div>
+
+<script>
+    let chart = null;
+
+    function renderChart(chartData) {
+        var options = {
+            series: [{ data: chartData }],
+            chart: { type: 'candlestick', height: 500, toolbar: { show: true } },
+            title: { text: 'Свечной график', align: 'left' },
+            xaxis: { type: 'datetime' },
+            yaxis: { tooltip: { enabled: true } }
+        };
+
+        if (chart) {
+            chart.updateOptions(options);
+            chart.updateSeries([{ data: chartData }]);
+        } else {
+            chart = new ApexCharts(document.querySelector("#chart"), options);
+            chart.render();
+        }
+    }
+
+    async function loadDataForTicker(ticker) {
+        const response = await fetch(`/api/stock/${ticker}`);
+        if (!response.ok) {
+            document.getElementById('prediction').innerText = 'Ошибка загрузки данных';
+            return;
+        }
+        const data = await response.json();
+        renderChart(data.data);
+        document.getElementById('prediction').innerText = data.prediction;
+    }
+
+    document.getElementById('tickerSelect').addEventListener('change', (event) => {
+        loadDataForTicker(event.target.value);
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+        loadDataForTicker(document.getElementById('tickerSelect').value);
+    });
+</script>
+</body>
+</html>"""
+
