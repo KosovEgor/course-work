@@ -10,6 +10,9 @@ from t_tech.invest.utils import now
 
 from PDT import predict, build_pdt
 
+from catboost import CatBoostClassifier
+
+
 warnings.filterwarnings('ignore')
 OUTPUT_DIR = './output'
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -257,52 +260,97 @@ def main():
     X_train, X_test = X[:split_idx], X[split_idx:]
     y_train, y_test = y[:split_idx], y[split_idx:]
 
-    tree = build_pdt(X_train, y_train, max_depth=MAX_DEPTH)
-    y_pred = [predict(tree, x) for x in X_test]
+    pdt = build_pdt(X_train, y_train, max_depth=MAX_DEPTH)
+    y_pred_pdt = [predict(pdt, x) for x in X_test]
 
     test_dates = df['time'].iloc[split_idx:].values
     test_close = df['Close'].iloc[split_idx:].values
-    results_df = pd.DataFrame({
+    results_df_pdt = pd.DataFrame({
         'Datetime': test_dates,
         'Actual': y_test,
-        'Predicted': y_pred,
+        'Predicted': y_pred_pdt,
         'Close': test_close,
     }).reset_index(drop=True)
 
     
-    results_df.to_csv(os.path.join(OUTPUT_DIR, 'sber_results_test.csv'), index=False)
-    print("Running trading simulation …")
-    portfolio_values, drawdown_pct, summary = simulate(
-        SYMBOL, results_df,
+    results_df_pdt.to_csv(os.path.join(OUTPUT_DIR, 'sber_results_test.csv'), index=False)
+    print("Running trading simulation of PDT...\n")
+    portfolio_values_pdt, drawdown_pct_pdt, summary_pdt = simulate(
+        SYMBOL, results_df_pdt,
         initial_balance=10_000,
         trailing_stop_percent=0.005,
     )
 
-    summary['Train Candles'] = len(X_train)
-    summary['Test Candles']  = len(X_test)
-    summary['Features'] = ', '.join(FEATURES)
-    metrics_df = pd.DataFrame([summary])
+    summary_pdt['Train Candles'] = len(X_train)
+    summary_pdt['Test Candles']  = len(X_test)
+    summary_pdt['Features'] = ', '.join(FEATURES)
+    metrics_df = pd.DataFrame([summary_pdt])
     metrics_path = os.path.join(OUTPUT_DIR, 'sber_metrics_summary.csv')
     metrics_df.to_csv(metrics_path, index=False)
     portfolio_df = pd.DataFrame({
-        'Datetime': results_df['Datetime'],
-        'Portfolio_Value': portfolio_values,
+        'Datetime': results_df_pdt['Datetime'],
+        'Portfolio_Value': portfolio_values_pdt,
     })
     portfolio_df.to_csv(os.path.join(OUTPUT_DIR, 'sber_portfolio_curve.csv'), index=False)
-    plot_portfolio(results_df, portfolio_values, SYMBOL, OUTPUT_DIR)
-    plot_drawdown(results_df,  drawdown_pct,     SYMBOL, OUTPUT_DIR)
+    plot_portfolio(results_df_pdt, portfolio_values_pdt, SYMBOL, OUTPUT_DIR)
+    plot_drawdown(results_df_pdt,  drawdown_pct_pdt,     SYMBOL, OUTPUT_DIR)
     pkl_path = os.path.join(OUTPUT_DIR, 'sber_pdt_model.pkl')
     with open(pkl_path, 'wb') as f:
-        pickle.dump(tree, f)
-    print("\n── Key Metrics ──────────────────────────────────")
-    print(f"  Growth (%):           {summary['Growth (%)']:>10.4f}%")
-    print(f"  Max Drawdown (%):     {summary['Max Drawdown (%)']:>10.4f}%")
-    print(f"  Buy & Hold Return:    {summary['Buy and Hold Return (%)']:>10.4f}%")
-    print(f"  Trading Accuracy:     {summary['Trading Accuracy (%)']:>10.4f}%")
-    print(f"  Total Trades:         {summary['Total Trades']:>10}")
-    print(f"  Avg Trade Profit:     {summary['Average Trade Profit (%)']:>10.4f}%")
+        pickle.dump(pdt, f)
+    print("\n── Key Metrics of PDT ──────────────────────────────────")
+    print(f"  Growth (%):           {summary_pdt['Growth (%)']:>10.4f}%")
+    print(f"  Max Drawdown (%):     {summary_pdt['Max Drawdown (%)']:>10.4f}%")
+    print(f"  Buy & Hold Return:    {summary_pdt['Buy and Hold Return (%)']:>10.4f}%")
+    print(f"  Trading Accuracy:     {summary_pdt['Trading Accuracy (%)']:>10.4f}%")
+    print(f"  Total Trades:         {summary_pdt['Total Trades']:>10}")
+    print(f"  Avg Trade Profit:     {summary_pdt['Average Trade Profit (%)']:>10.4f}%")
+    print("────────────────────────────────────────────────────────\n")
+
+
+    cat_model = CatBoostClassifier(
+        depth=5,
+        verbose=False, 
+        iterations=300,
+        learning_rate=0.03,
+        l2_leaf_reg=5,
+        random_seed=42,
+        early_stopping_rounds=30,
+        subsample=0.8,
+        colsample_bylevel=0.8,
+        bootstrap_type='Bernoulli',
+        loss_function='Logloss',
+        eval_metric='AUC',
+        class_weights=[1, 2]
+    )
+
+    cat_model.fit(X_train, y_train)
+    y_pred_cat = cat_model.predict(X_test)
+
+    results_cat = pd.DataFrame({
+        'Datetime': test_dates,
+        'Actual': y_test,
+        'Predicted': y_pred_cat,
+        'Close': test_close,
+    }).reset_index(drop=True)
+
+    print("Running trading simulation of Catboost...\n")
+    portfolio_values_cat, drawdown_pct_cat, summary_cat = simulate(
+        SYMBOL, results_cat,
+        initial_balance=10_000,
+        trailing_stop_percent=0.005,
+    )
+
+    print("\n── Key Metrics of Catboost ──────────────────────────────────")
+    print(f"  Growth (%):           {summary_cat['Growth (%)']:>10.4f}%")
+    print(f"  Max Drawdown (%):     {summary_cat['Max Drawdown (%)']:>10.4f}%")
+    print(f"  Buy & Hold Return:    {summary_cat['Buy and Hold Return (%)']:>10.4f}%")
+    print(f"  Trading Accuracy:     {summary_cat['Trading Accuracy (%)']:>10.4f}%")
+    print(f"  Total Trades:         {summary_cat['Total Trades']:>10}")
+    print(f"  Avg Trade Profit:     {summary_cat['Average Trade Profit (%)']:>10.4f}%")
     print("────────────────────────────────────────────────────────")
-    return summary
+
+
+    return summary_pdt
 
 
 if __name__ == '__main__':
