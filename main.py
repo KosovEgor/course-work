@@ -13,18 +13,29 @@ warnings.filterwarnings("ignore")
 from model import fetch_sber_tinvest, identify_swings, compute_RSI, FEATURES
 from PDT import predict
 
-MODEL_PATH = "./output/sber_pdt_model.pkl"
+PDT_MODEL_PATH = "./output/sber_pdt_model.pkl"
+CB_MODEL_PATH  = "./output/sber_catboost_model.pkl"
+
 
 app = FastAPI()
 
-_tree = None
+_pdt_tree = None
+_cb_model = None
 
-def get_tree():
-    global _tree
-    if _tree is None and os.path.exists(MODEL_PATH):
-        with open(MODEL_PATH, "rb") as f:
-            _tree = pickle.load(f)
-    return _tree
+def get_pdt_tree():
+    global _pdt_tree
+    if _pdt_tree is None and os.path.exists(PDT_MODEL_PATH):
+        with open(PDT_MODEL_PATH, "rb") as f:
+            _pdt_tree = pickle.load(f)
+    return _pdt_tree
+ 
+ 
+def get_cb_model():
+    global _cb_model
+    if _cb_model is None and os.path.exists(CB_MODEL_PATH):
+        with open(CB_MODEL_PATH, "rb") as f:
+            _cb_model = pickle.load(f)
+    return _cb_model
 
 
 def compute_features_live(df):
@@ -51,6 +62,22 @@ def compute_features_live(df):
     df['RSI'] = (100 - 100 / (1 + avg_gain / avg_loss)).shift(1)
     df.dropna(inplace=True)
     return df.reset_index(drop=True)
+
+def build_prediction_text(row: pd.Series, signal: str, model_name: str) -> str:
+    if row['RSI'] > 70:
+        rsi_desc = "рынок перекуплен"
+    elif row['RSI'] < 30:
+        rsi_desc = "рынок перепродан"
+    else:
+        rsi_desc = "нейтральное состояние рынка"
+    return (
+        f"Рекомендация {model_name}: {signal}\n\n"
+        f"Ключевая статистика\n"
+        f"Цена: {row['Close']:.2f} ₽\n"
+        f"RSI: {row['RSI']:.1f} - {rsi_desc}\n"
+        f"MA20: {row['MA_20']:.2f} - средняя цена за последние 20 свечей\n"
+        f"MA50: {row['MA_50']:.2f} - средняя цена за последние 50 свечей\n"
+    )
 
 
 @app.get("/api/stock/{ticker}")
