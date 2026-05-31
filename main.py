@@ -1,16 +1,14 @@
 import os
 import pickle
 import warnings
-import numpy as np
 import pandas as pd
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 
 warnings.filterwarnings("ignore")
 
-from model import fetch_sber_tinvest, identify_swings, compute_RSI, FEATURES
+from model import fetch_sber_tinvest, FEATURES
 from PDT import predict
 
 PDT_MODEL_PATH = "./output/sber_pdt_model.pkl"

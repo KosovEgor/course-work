@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import timedelta
 from t_tech.invest import Client, CandleInterval
 from t_tech.invest.utils import now
 
