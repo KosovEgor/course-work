@@ -25,7 +25,7 @@ def fetch_sber_tinvest(days=90):
     with Client(TOKEN) as client:
         for c in client.get_all_candles(
             instrument_id=FIGI,
-            interval=CandleInterval.CANDLE_INTERVAL_4_HOUR,
+            interval=CandleInterval.CANDLE_INTERVAL_5_MIN,
             from_=now() - timedelta(days=days),
         ):
             candles.append({
@@ -248,7 +248,7 @@ def main():
     SPLIT_RATIO = 0.80
     MAX_DEPTH = 20
 
-    df_raw = fetch_sber_tinvest(90)
+    df_raw = fetch_sber_tinvest(60)
     df_raw.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_raw.csv'), index=False)
     df = prepare_df(df_raw)
     df.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_processed.csv'), index=False)
