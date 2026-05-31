@@ -83,7 +83,7 @@ def build_prediction_text(row: pd.Series, signal: str, model_name: str) -> str:
 @app.get("/api/stock/{ticker}")
 async def api_stock(ticker: str):
     df = fetch_sber_tinvest(days=90)
-
+ 
     chart_data = []
     for _, row in df.iterrows():
         ts_ms = int(pd.Timestamp(row["time"]).timestamp() * 1000)
@@ -96,24 +96,29 @@ async def api_stock(ticker: str):
                 round(float(row["Close"]), 2),
             ],
         })
-
-    tree = get_tree()
-
+ 
     df_feat = compute_features_live(df)
-    row = df_feat.iloc[-1]
-    x = [float(row[f]) for f in FEATURES]
-    pred = int(predict(tree, x))
-    signal = "КУПИТЬ" if pred == 1 else "ПРОДАТЬ"
-    prediction = (
-        f"Рекомендация PDT : {signal}\n\n"
-        f"Ключевая статистика\n"
-        f"Цена: {row['Close']:.2f} ₽\n"
-        f"RSI: {row['RSI']:.1f} - {'рынок перекуплен' if row['RSI'] > 70 else 'рынок перепродан' if row['RSI'] < 30 else 'нейтральное состояние рынка'}\n"
-        f"MA20: {row['MA_20']:.2f} - средняя цена за последние 20 свечей\n"
-        f"MA50: {row['MA_50']:.2f} - средняя цена за последние 50 свечей\n"
-    )
+    latest = df_feat.iloc[-1]
+    x = [float(latest[f]) for f in FEATURES]
+ 
+    if ticker == "SBER_CB":
+        model = get_cb_model()
+        pred = int(model.predict([x])[0])
+        model_name = "CatBoost"
+    else:
+        tree = get_pdt_tree()
+        pred = int(predict(tree, x))
+        model_name = "PDT"
 
+    if pred == 1:
+        signal = "КУПИТЬ"
+    else:
+        signal = "ПРОДАТЬ"
+    
+    prediction = build_prediction_text(latest, signal, model_name)
+ 
     return JSONResponse({"data": chart_data, "prediction": prediction})
+ 
 
 
 @app.get("/")
