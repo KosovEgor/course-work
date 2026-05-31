@@ -173,7 +173,7 @@ def simulate(stock_symbol, results_df, initial_balance=10_000,
     return portfolio_values, drawdown_pct.tolist(), summary
 
 
-def plot_portfolio(results_df, portfolio_values, symbol, out_dir):
+def plot_portfolio(results_df, portfolio_values, symbol, out_dir, model_name):
     dates = results_df['Datetime'].values
     n = len(dates)
     init_close = results_df['Close'].iloc[0]
@@ -186,7 +186,7 @@ def plot_portfolio(results_df, portfolio_values, symbol, out_dir):
     out_m = pv_s > bh_s
     under_m = ~out_m
     fig, ax = plt.subplots(figsize=(14, 7))
-    ax.plot(days, pv_s, label="PDT Bot (%)", lw=2)
+    ax.plot(days, pv_s, label=f"{model_name} Bot (%)", lw=2)
     ax.plot(days, bh_s, label="Buy & Hold (%)", lw=2, ls='--')
     ax.fill_between(days, bh_s, pv_s, where=out_m, alpha=0.3,
                     interpolate=True, label='Outperformance')
@@ -201,15 +201,15 @@ def plot_portfolio(results_df, portfolio_values, symbol, out_dir):
                 bbox=dict(boxstyle='round', fc='white', ec='black', alpha=0.7))
     ax.set_xlabel('Trading Period (candles)', fontsize=14)
     ax.set_ylabel('Return vs Initial (%)', fontsize=14)
-    ax.set_title(f'PDT Bot vs Buy & Hold — {symbol}', fontsize=15)
+    ax.set_title(f'{model_name} Bot vs Buy & Hold — {symbol}', fontsize=15)
     ax.legend(fontsize=12)
     ax.grid(True, alpha=0.4)
-    path = os.path.join(out_dir, 'portfolio_vs_buyhold.png')
+    path = os.path.join(out_dir, f'portfolio_vs_buyhold_{model_name}.png')
     fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_drawdown(results_df, drawdown_pct, symbol, out_dir):
+def plot_drawdown(results_df, drawdown_pct, symbol, out_dir, model_name):
     n = len(drawdown_pct)
     days = np.arange(1, n + 1)
     close = results_df['Close'].values
@@ -220,7 +220,7 @@ def plot_drawdown(results_df, drawdown_pct, symbol, out_dir):
     out_m = pv_dd > bh_dd
     under_m = ~out_m
     fig, ax = plt.subplots(figsize=(14, 7))
-    ax.plot(days, pv_dd, label="PDT Bot Drawdown (%)", lw=2)
+    ax.plot(days, pv_dd, label=f"{model_name} Bot Drawdown (%)", lw=2)
     ax.plot(days, bh_dd, label="Buy & Hold Drawdown (%)", lw=2, ls='--')
     ax.fill_between(days, bh_dd, pv_dd, where=out_m, alpha=0.3,
                     interpolate=True, label='Bot Less Drawdown')
@@ -238,7 +238,7 @@ def plot_drawdown(results_df, drawdown_pct, symbol, out_dir):
     ax.set_title(f'Drawdown Analysis — {symbol}', fontsize=15)
     ax.legend(fontsize=12)
     ax.grid(True, alpha=0.4)
-    path = os.path.join(out_dir, 'drawdown_chart.png')
+    path = os.path.join(out_dir, f'drawdown_chart_{model_name}.png')
     fig.savefig(path, dpi=150, bbox_inches='tight')
     plt.close(fig)
 
@@ -247,15 +247,13 @@ def main():
     SYMBOL = 'SBER'
     SPLIT_RATIO = 0.80
     MAX_DEPTH = 20
-
+    print(f'Running preprocessing...')
     df_raw = fetch_sber_tinvest(60)
-    df_raw.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_raw.csv'), index=False)
     df = prepare_df(df_raw)
-    df.to_csv(os.path.join(OUTPUT_DIR, 'sber_data_processed.csv'), index=False)
 
     X = df[FEATURES].values
     y = df['Target'].values
-
+    print(f'Running training...')   
     split_idx = int(len(X) * SPLIT_RATIO)
     X_train, X_test = X[:split_idx], X[split_idx:]
     y_train, y_test = y[:split_idx], y[split_idx:]
@@ -272,8 +270,6 @@ def main():
         'Close': test_close,
     }).reset_index(drop=True)
 
-    
-    results_df_pdt.to_csv(os.path.join(OUTPUT_DIR, 'sber_results_test.csv'), index=False)
     print("Running trading simulation of PDT...\n")
     portfolio_values_pdt, drawdown_pct_pdt, summary_pdt = simulate(
         SYMBOL, results_df_pdt,
@@ -284,19 +280,13 @@ def main():
     summary_pdt['Train Candles'] = len(X_train)
     summary_pdt['Test Candles']  = len(X_test)
     summary_pdt['Features'] = ', '.join(FEATURES)
-    metrics_df = pd.DataFrame([summary_pdt])
-    metrics_path = os.path.join(OUTPUT_DIR, 'sber_metrics_summary.csv')
-    metrics_df.to_csv(metrics_path, index=False)
-    portfolio_df = pd.DataFrame({
-        'Datetime': results_df_pdt['Datetime'],
-        'Portfolio_Value': portfolio_values_pdt,
-    })
-    portfolio_df.to_csv(os.path.join(OUTPUT_DIR, 'sber_portfolio_curve.csv'), index=False)
-    plot_portfolio(results_df_pdt, portfolio_values_pdt, SYMBOL, OUTPUT_DIR)
-    plot_drawdown(results_df_pdt,  drawdown_pct_pdt,     SYMBOL, OUTPUT_DIR)
-    pkl_path = os.path.join(OUTPUT_DIR, 'sber_pdt_model.pkl')
-    with open(pkl_path, 'wb') as f:
+    
+    plot_portfolio(results_df_pdt, portfolio_values_pdt, SYMBOL, OUTPUT_DIR, "PDT")
+    plot_drawdown(results_df_pdt,  drawdown_pct_pdt,     SYMBOL, OUTPUT_DIR, "PDT")
+    pkl_path_pdt = os.path.join(OUTPUT_DIR, 'sber_pdt_model.pkl')
+    with open(pkl_path_pdt, 'wb') as f:
         pickle.dump(pdt, f)
+    
     print("\n── Key Metrics of PDT ──────────────────────────────────")
     print(f"  Growth (%):           {summary_pdt['Growth (%)']:>10.4f}%")
     print(f"  Max Drawdown (%):     {summary_pdt['Max Drawdown (%)']:>10.4f}%")
@@ -320,13 +310,14 @@ def main():
         bootstrap_type='Bernoulli',
         loss_function='Logloss',
         eval_metric='AUC',
-        class_weights=[1, 2]
+        class_weights=[1, 2],
+        allow_writing_files=False
     )
 
     cat_model.fit(X_train, y_train)
     y_pred_cat = cat_model.predict(X_test)
 
-    results_cat = pd.DataFrame({
+    results_df_cat = pd.DataFrame({
         'Datetime': test_dates,
         'Actual': y_test,
         'Predicted': y_pred_cat,
@@ -335,10 +326,16 @@ def main():
 
     print("Running trading simulation of Catboost...\n")
     portfolio_values_cat, drawdown_pct_cat, summary_cat = simulate(
-        SYMBOL, results_cat,
+        SYMBOL, results_df_cat,
         initial_balance=10_000,
         trailing_stop_percent=0.005,
     )
+
+    plot_portfolio(results_df_cat, portfolio_values_cat, SYMBOL, OUTPUT_DIR, "catboost")
+    plot_drawdown(results_df_cat,  drawdown_pct_cat,     SYMBOL, OUTPUT_DIR, "catboost")
+    pkl_path_cat = os.path.join(OUTPUT_DIR, 'sber_catboost_model.pkl')
+    with open(pkl_path_cat, 'wb') as f:
+        pickle.dump(cat_model, f)
 
     print("\n── Key Metrics of Catboost ──────────────────────────────────")
     print(f"  Growth (%):           {summary_cat['Growth (%)']:>10.4f}%")
