@@ -80,7 +80,7 @@ def build_prediction_text(row: pd.Series, signal: str, model_name: str) -> str:
 
 @app.get("/api/stock/{ticker}")
 async def api_stock(ticker: str):
-    df = fetch_sber_tinvest(days=90)
+    df = fetch_sber_tinvest(days=60)
  
     chart_data = []
     for _, row in df.iterrows():
