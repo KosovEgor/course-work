@@ -9,7 +9,15 @@
         .container { max-width: 1000px; margin: auto; }
         select, button { font-size: 1rem; padding: 6px 12px; margin: 10px 0; }
         #chart { margin-top: 20px; }
-        #prediction { margin-top: 20px; font-size: 1.2rem; color: #2c3e50; background: #ecf0f1; padding: 12px; border-radius: 8px; white-space: pre-line; }
+        #prediction {
+            margin-top: 20px; font-size: 1.2rem; color: #2c3e50;
+            background: #ecf0f1; padding: 12px; border-radius: 8px;
+            white-space: pre-line;
+        }
+        #loading {
+            display: none; margin-top: 10px;
+            color: #888; font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -18,44 +26,67 @@
         <option value="SBER_PDT">Сбербанк (PDT)</option>
         <option value="SBER_CB">Сбербанк (CatBoost)</option>
     </select>
+    <div id="loading">Загрузка данных…</div>
     <div id="chart"></div>
     <div id="prediction"></div>
 </div>
 
 <script>
     let chart = null;
+    let abortController = null;
+
+    const BASE_OPTIONS = {
+        chart: {
+            type: 'candlestick',
+            height: 500,
+            toolbar: { show: true },
+            animations: { enabled: false },
+        },
+        title: { text: 'График свечей SBER', align: 'left' },
+        xaxis: { type: 'datetime' },
+        yaxis: { tooltip: { enabled: true } },
+        stroke: { width: 1 },
+        series: [{ data: [] }],
+    };
 
     function renderChart(chartData) {
-        var options = {
-            series: [{ data: chartData }],
-            chart: { type: 'candlestick', height: 500, toolbar: { show: true } },
-            title: { text: 'График свечей SBER', align: 'left' },
-            xaxis: { type: 'datetime' },
-            yaxis: { tooltip: { enabled: true } }
-        };
-
         if (chart) {
-            chart.updateOptions(options);
-            chart.updateSeries([{ data: chartData }]);
+            chart.updateSeries([{ data: chartData }], false);
         } else {
-            chart = new ApexCharts(document.querySelector("#chart"), options);
+            chart = new ApexCharts(
+                document.querySelector("#chart"),
+                { ...BASE_OPTIONS, series: [{ data: chartData }] }
+            );
             chart.render();
         }
     }
 
     async function loadDataForTicker(ticker) {
-        const response = await fetch(`/api/stock/${ticker}`);
-        if (!response.ok) {
-            document.getElementById('prediction').innerText = 'Ошибка загрузки данных';
-            return;
+        if (abortController) abortController.abort();
+        abortController = new AbortController();
+
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('prediction').innerText = '';
+
+        try {
+            const response = await fetch(`/api/stock/${ticker}`, {
+                signal: abortController.signal,
+            });
+            if (!response.ok) throw new Error('Network error');
+            const data = await response.json();
+            renderChart(data.data);
+            document.getElementById('prediction').innerText = data.prediction;
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                document.getElementById('prediction').innerText = 'Ошибка загрузки данных';
+            }
+        } finally {
+            document.getElementById('loading').style.display = 'none';
         }
-        const data = await response.json();
-        renderChart(data.data);
-        document.getElementById('prediction').innerText = data.prediction;
     }
 
-    document.getElementById('tickerSelect').addEventListener('change', (event) => {
-        loadDataForTicker(event.target.value);
+    document.getElementById('tickerSelect').addEventListener('change', e => {
+        loadDataForTicker(e.target.value);
     });
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -64,4 +95,3 @@
 </script>
 </body>
 </html>
-
